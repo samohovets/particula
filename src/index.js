@@ -1,19 +1,10 @@
-const helmet = require('helmet');
-const express = require('express');
-const bodyParser = require('body-parser');
+const {setupApp, setupErrorHandling} = require('./express');
 const {setupPlugins, postsetupPlugins} = require('./config');
 const setupMiddleware = require('./middleware');
 const setupRoutes = require('./routes');
 
-// init express app
-const app = express();
-
-// body parsing (POST/PUT support)
-app.use(bodyParser.urlencoded({extended: false}));
-app.use(bodyParser.json());
-
-// enable helmet with defaults
-app.use(helmet());
+// construct new server instance
+const app = setupApp();
 
 // setup function, returns express app
 const setup = async () => {
@@ -21,6 +12,7 @@ const setup = async () => {
   setupMiddleware(app);
   setupRoutes(app);
   await postsetupPlugins(app);
+  setupErrorHandling(app);
   return app;
 };
 exports.setup = setup;

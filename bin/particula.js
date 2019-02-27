@@ -1,31 +1,41 @@
 #!/usr/bin/env node
-const yargs = require('yargs');
+const arg = require('arg');
+const pkg = require('../package.json');
+const {start} = require('../index.js');
 
-const { start } = require('../index.js');
+const args = arg({
+  // Types
+  '--help': Boolean,
+  '--version': Boolean,
+  '--port': Number, // --port <number> or --port=<number>
+  // Aliases
+  '-p': '--port', // -n <string>; result is stored in --name
+});
 
-const package = require('../package.json');
+// print out version
+if (args['--version']) {
+  console.log(`Particula version ${pkg.version}`);
+  return;
+}
 
-// CLI config
+// print out help
+if (args['--help']) {
+  console.log(`Particula - zero-config Express.js Framework 
 
-yargs
-  .version(package.version)
-  .help()
-  .command({
-    command: '*',
-    describe: 'start server',
-    builder: {
-      port: {
-        alias: 'p',
-        description: 'Start server at specified port',
-        type: 'number'
-      }
-    },
-    handler({ port }) {
-      if (isNaN(port)) {
-        console.error('Invalid port');
-        process.exit(1);
-      }
-      start(port);
-    }
-  }).argv;
+Options:
+  --version   Show version number                             [boolean]
+  --help      Show this help                                  [boolean]
+  --port, -p  Start server at specified port   [number] [default: 8080]`);
+  return;
+}
 
+let port = 8080;
+if (args['--port']) {
+  port = parseInt(args['--port'], 10);
+  if (isNaN(port)) {
+    console.error('Invalid port');
+    process.exit(1);
+  }
+}
+
+start(port);
