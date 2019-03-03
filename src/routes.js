@@ -20,14 +20,14 @@ const asyncWrapper = fn => (req, res, next) => {
 // converts file name to route name
 const fileNameToRoute = fileName => {
   const fileBaseName = fileName.replace(/\.js$/, '');
-  const routeName = fileBaseName === 'index' ? '/' : `/${fileBaseName.toLowerCase()}`;
-  return routeName;
+  const routeName = fileBaseName.toLowerCase().replace('index', '');
+  return routeName.startsWith('/') ? routeName : `/${routeName}`;
 };
 
 // loads given file into router
 const applyFile = (app, fileName) => {
   const routeName = fileNameToRoute(fileName);
-  const routeHandler = require(require.resolve(path.join(routesPath, fileName)));
+  const routeHandler = require(path.join(routesPath, fileName));
 
   if (typeof routeHandler.default === 'function') {
     app.get(routeName, asyncWrapper(routeHandler.default));
@@ -110,8 +110,14 @@ const registerRoutes = app => {
 
 // sets up hot reload for routes
 const setupHotReload = app => {
-  chokidar
-    .watch(path.join(routesPath, '*.js'), {ignoreInitial: true})
+  // do not setup hot reload when running in testing mode
+  if (process.env.NODE_ENV === 'testing') {
+    return;
+  }
+
+  const watcher = chokidar.watch(path.join(routesPath, '**/*.js'), {ignoreInitial: true});
+
+  watcher
     .on('add', fullpath => {
       try {
         const {base: fileName} = path.parse(fullpath);
@@ -127,7 +133,7 @@ const setupHotReload = app => {
     })
     .on('change', fullpath => {
       try {
-        const {base: fileName} = path.parse(fullpath);
+        const fileName = fullpath.replace(routesPath, '');
         // delete cached required script
         delete require.cache[fullpath];
         // load new version
@@ -150,19 +156,35 @@ const setupHotReload = app => {
         console.error('Error removing route:', e);
       }
     });
+
+  return watcher;
 };
+
+const getFiles = (folderpath, {base = '/'} = {}) =>
+  [].concat.apply(
+    [],
+    fs.readdirSync(folderpath).map(filename => {
+      const filepath = path.join(folderpath, filename);
+      if (fs.lstatSync(filepath).isDirectory()) {
+        return getFiles(filepath, {base: path.join(base, filename)});
+      }
+
+      return path.join(base, filename);
+    })
+  );
 
 // loads and sets up all user routes
 const setupRoutes = app => {
-  const routesFiles = fs.readdirSync(routesPath);
+  // if middleware path doesn't exist - throw an error
+  if (!fs.existsSync(routesPath)) {
+    throw new Error(`Routes path doesn't exist! Please create routes/ folder.`);
+  }
+
+  // get files list
+  const routesFiles = getFiles(routesPath);
 
   // setup routes with hot reload if not running in production
   if (process.env.NODE_ENV !== 'production') {
-    // if middleware path doesn't exist - throw an error
-    if (!fs.existsSync(routesPath)) {
-      throw new Error(`Routes path doesn't exist! Please create routes/ folder.`);
-    }
-
     // load routes into memory
     for (const fileName of routesFiles) {
       const {router, routeName} = loadFile(app, fileName);
@@ -173,8 +195,7 @@ const setupRoutes = app => {
     registerRoutes(app);
 
     // setup hot reload
-    setupHotReload(app);
-    return;
+    return setupHotReload(app);
   }
 
   // when running in production
